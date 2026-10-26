@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Desviación Magnética</title>
+<style>
+  :root {
+    --bg: #f4f5f2; --panel: #ffffff; --ink: #1d2320; --muted: #5d6762;
+    --line: #d5d9d4; --accent: #34573f; --accent-ink: #ffffff;
+    --input: #fbfcfa; --warn: #9a3412; --warn-bg: #fff1e8; --ok-bg: #eef5ef;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141816; --panel: #1d2320; --ink: #e8ece9; --muted: #9aa59f;
+      --line: #333c37; --accent: #7fb08e; --accent-ink: #0f1311;
+      --input: #161b18; --warn: #fdba74; --warn-bg: #2b1d14; --ok-bg: #18251c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141816; --panel: #1d2320; --ink: #e8ece9; --muted: #9aa59f;
+    --line: #333c37; --accent: #7fb08e; --accent-ink: #0f1311;
+    --input: #161b18; --warn: #fdba74; --warn-bg: #2b1d14; --ok-bg: #18251c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.45 system-ui, "Segoe UI", Arial, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.45rem; margin: 0 0 4px; letter-spacing: .02em; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); margin: 0 0 12px; }
+  h3 { font-size: .85rem; margin: 12px 0 6px; color: var(--muted); font-weight: 600; }
+  .dms { display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: 6px; align-items: end; }
+  label { display: block; font-size: .75rem; color: var(--muted); }
+  input, select { width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px;
+                  background: var(--input); color: var(--ink); font: inherit; font-variant-numeric: tabular-nums; }
+  .hemi { min-width: 56px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  td, th { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: .8rem; }
+  td.v { text-align: right; white-space: nowrap; }
+  .big { font-size: 1.25rem; font-weight: 700; }
+  .result { background: var(--ok-bg); }
+  .msg { margin-top: 10px; padding: 8px 10px; border-radius: 6px; background: var(--warn-bg); color: var(--warn); font-size: .85rem; }
+  .msg:empty { display: none; }
+  .note { font-size: .8rem; color: var(--muted); margin-top: 8px; }
+  a { color: var(--accent); }
+  .full { grid-column: 1 / -1; }
+  .conv { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .btn { width: 100%; padding: 8px 10px; border: 1px solid var(--accent); border-radius: 6px;
+         background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 600; cursor: pointer; }
+  .btn:disabled { opacity: .6; cursor: wait; }
+  input[readonly], input:disabled, select:disabled { opacity: .75; }
+  @media print { body { background: #fff; } section { break-inside: avoid; } .btn { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>CÁLCULO DE DESVIACIÓN MAGNÉTICA</h1>
+  <p class="sub">Réplica de la planilla <em>CALCULO DESVIACION MAGNETICA.xlsx</em>, hoja "DESV MAG". Gauss-Krüger POSGAR 2007, Argentina. Los resultados salen en grados y en milésimos (6400).</p>
+
+  <div class="grid">
+    <section class="full">
+      <h2>Zona de cálculo</h2>
+      <div class="row">
+        <div><label>Calcular para</label>
+          <select id="modo">
+            <option value="hoja">Una hoja (centro entre esquinas NO y SE)</option>
+            <option value="punto">Un punto (coordenadas o ubicación del dispositivo)</option>
+          </select></div>
+        <div><label>&nbsp;</label><button type="button" id="btnGeo" class="btn">📍 Usar la ubicación del dispositivo</button></div>
+      </div>
+      <div class="row" id="filaPunto" style="margin-top:8px">
+        <div><label>Latitud del punto (decimal, S negativa)</label><input id="pLat" type="text" inputmode="decimal" placeholder="-41.1750"></div>
+        <div><label>Longitud del punto (decimal, O negativa)</label><input id="pLon" type="text" inputmode="decimal" placeholder="-71.8450"></div>
+      </div>
+      <p class="note" id="geoEstado"></p>
+    </section>
+
+    <section class="esquinas">
+      <h2>Extremo superior izquierdo (NO)</h2>
+      <h3>Latitud</h3>
+      <div class="dms">
+        <div><label>Grados</label><input id="noLatG" type="number" min="0" max="90" value="41"></div>
+        <div><label>Min</label><input id="noLatM" type="number" min="0" max="59" value="4"></div>
+        <div><label>Seg</label><input id="noLatS" type="number" min="0" max="59.999" step="any" value="48"></div>
+        <div><label>&nbsp;</label><select id="noLatH" class="hemi"><option>S</option><option>N</option></select></div>
+      </div>
+      <h3>Longitud</h3>
+      <div class="dms">
+        <div><label>Grados</label><input id="noLonG" type="number" min="0" max="180" value="71"></div>
+        <div><label>Min</label><input id="noLonM" type="number" min="0" max="59" value="58"></div>
+        <div><label>Seg</label><input id="noLonS" type="number" min="0" max="59.999" step="any" value="12"></div>
+        <div><label>&nbsp;</label><select id="noLonH" class="hemi"><option>O</option><option>E</option></select></div>
+      </div>
+    </section>
+
+    <section class="esquinas">
+      <h2>Extremo inferior derecho (SE)</h2>
+      <h3>Latitud</h3>
+      <div class="dms">
+        <div><label>Grados</label><input id="seLatG" type="number" min="0" max="90" value="41"></div>
+        <div><label>Min</label><input id="seLatM" type="number" min="0" max="59" value="16"></div>
+        <div><label>Seg</label><input id="seLatS" type="number" min="0" max="59.999" step="any" value="12"></div>
+        <div><label>&nbsp;</label><select id="seLatH" class="hemi"><option>S</option><option>N</option></select></div>
+      </div>
+      <h3>Longitud</h3>
+      <div class="dms">
+        <div><label>Grados</label><input id="seLonG" type="number" min="0" max="180" value="71"></div>
+        <div><label>Min</label><input id="seLonM" type="number" min="0" max="59" value="43"></div>
+        <div><label>Seg</label><input id="seLonS" type="number" min="0" max="59.999" step="any" value="12"></div>
+        <div><label>&nbsp;</label><select id="seLonH" class="hemi"><option>O</option><option>E</option></select></div>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="tituloCentro">Centro de hoja</h2>
+      <table>
+        <tr><th></th><th>Decimal</th><th>G° M′ S″</th></tr>
+        <tr><td>Latitud</td><td class="v" id="cLatD"></td><td class="v" id="cLatGMS"></td></tr>
+        <tr><td>Longitud</td><td class="v" id="cLonD"></td><td class="v" id="cLonGMS"></td></tr>
+      </table>
+      <p class="note">Para cotejar con el NOAA: <a href="https://www.ngdc.noaa.gov/geomag/calculators/magcalc.shtml#declination" target="_blank" rel="noopener">ngdc.noaa.gov/geomag</a>. Cargá estas coordenadas y la fecha.</p>
+      <div class="msg" id="msgZona"></div>
+    </section>
+
+    <section>
+      <h2>Declinación magnética</h2>
+      <div class="row">
+        <div><label>Fuente</label>
+          <select id="fuente">
+            <option value="auto">Automática: WMM2025 (sin internet)</option>
+            <option value="manual">Manual: dato del NOAA</option>
+          </select></div>
+        <div><label>Fecha</label><input id="fecha" type="date"></div>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <div><label>Altura (m s.n.m., opcional)</label><input id="altura" type="number" step="any" value="0"></div>
+        <div><label>&nbsp;</label><div class="note" id="estadoModelo" style="margin:6px 0 0"></div></div>
+      </div>
+      <h3>Valor</h3>
+      <div class="dms">
+        <div><label>Grados</label><input id="decG" type="number" min="0" max="90" value="8"></div>
+        <div><label>Min</label><input id="decM" type="number" min="0" max="59" value="30"></div>
+        <div><label>Seg</label><input id="decS" type="number" min="0" max="59.999" step="any" value="0"></div>
+        <div><label>&nbsp;</label><select id="decH" class="hemi"><option value="W">W</option><option value="E">E</option></select></div>
+      </div>
+      <p class="note">En modo automático se completa solo con el modelo WMM2025 (el mismo que usa el NOAA). En modo manual cargá los valores en positivo y elegí W o E. W equivale al signo (−) de la planilla.</p>
+      <h3>Variación anual</h3>
+      <div class="row">
+        <div><label>Minutos por año</label><input id="varMin" type="number" step="any" value=""></div>
+        <div><label>Sentido</label><select id="varH"><option value="W">W (−)</option><option value="E">E (+)</option></select></div>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <div><label>Año del dato NOAA</label><input id="anioBase" type="number" step="any" placeholder="p. ej. 2026.8"></div>
+        <div><label>Año a proyectar</label><input id="anioObj" type="number" step="any" placeholder="p. ej. 2027.5"></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Faja Gauss-Krüger</h2>
+      <div class="row">
+        <div><label>N° de faja</label>
+          <select id="faja">
+            <option value="auto">Automática (por longitud del centro)</option>
+            <option>1</option><option>2</option><option>3</option><option>4</option>
+            <option>5</option><option>6</option><option>7</option>
+          </select></div>
+        <div><label>Meridiano central (LCF)</label><input id="lcf" readonly></div>
+      </div>
+      <div class="msg" id="msgFaja"></div>
+    </section>
+
+    <section class="result">
+      <h2>Resultados</h2>
+      <table>
+        <tr><th></th><th>Grados</th><th>G° M′ S″</th><th>Milésimos</th></tr>
+        <tr><td>LCH − LCF</td><td class="v" id="dLon"></td><td class="v"></td><td class="v"></td></tr>
+        <tr><td>Convergencia de meridianos</td><td class="v" id="convD"></td><td class="v" id="convGMS"></td><td class="v" id="convMil"></td></tr>
+        <tr><td>Declinación magnética</td><td class="v" id="decD"></td><td class="v" id="decGMS"></td><td class="v" id="decMil"></td></tr>
+        <tr><td><strong>Desviación magnética (NC–NM)</strong></td><td class="v big" id="desvD"></td><td class="v big" id="desvGMS"></td><td class="v big" id="desvMil"></td></tr>
+        <tr id="filaProy" hidden><td>Desviación proyectada al <span id="anioObjTxt"></span></td><td class="v" id="proyD"></td><td class="v" id="proyGMS"></td><td class="v" id="proyMil"></td></tr>
+      </table>
+      <p class="note">Desviación = Declinación − Convergencia. Convergencia = (LCH − LCF) · sen(latitud). Signo negativo = W. 1° = 17,778 ‰.</p>
+    </section>
+  </div>
+
+  <h2 style="margin-top:28px">Convertidor</h2>
+  <div class="conv">
+    <section>
+      <h3>G° M′ S″ → decimales de grado</h3>
+      <div class="dms" style="grid-template-columns:repeat(3,1fr)">
+        <div><label>Grados</label><input id="cvG" type="number" step="any" value="0"></div>
+        <div><label>Min</label><input id="cvM" type="number" step="any" value="0"></div>
+        <div><label>Seg</label><input id="cvS" type="number" step="any" value="0"></div>
+      </div>
+      <p>= <strong id="cvOut1"></strong>° · <strong id="cvOut1m"></strong> ‰</p>
+    </section>
+    <section>
+      <h3>Decimales de grado → G° M′ S″</h3>
+      <input id="cvD" type="number" step="any" value="0">
+      <p>= <strong id="cvOut2"></strong> · <strong id="cvOut2m"></strong> ‰</p>
+    </section>
+    <section>
+      <h3>Milésimos → grados</h3>
+      <input id="cvMil" type="number" step="any" value="0">
+      <p>= <strong id="cvOut3"></strong>° · <strong id="cvOut3g"></strong></p>
+    </section>
+  </div>
+</main>
+
+<script>
+// ── Modelo Magnético Mundial WMM2025 (NOAA/BGS), válido 2025.0–2030.0 ─────────────
+// Coeficientes oficiales del archivo WMM.COF: "n m g h dg dh" separados por "|".
+const WMM_EPOCA = 2025.0;
+const WMM_COF = "1 0 -29351.8 0.0 12.0 0.0|1 1 -1410.8 4545.4 9.7 -21.5|2 0 -2556.6 0.0 -11.6 0.0|2 1 2951.1 -3133.6 -5.2 -27.7|2 2 1649.3 -815.1 -8.0 -12.1|3 0 1361.0 0.0 -1.3 0.0|3 1 -2404.1 -56.6 -4.2 4.0|3 2 1243.8 237.5 0.4 -0.3|3 3 453.6 -549.5 -15.6 -4.1|4 0 895.0 0.0 -1.6 0.0|4 1 799.5 278.6 -2.4 -1.1|4 2 55.7 -133.9 -6.0 4.1|4 3 -281.1 212.0 5.6 1.6|4 4 12.1 -375.6 -7.0 -4.4|5 0 -233.2 0.0 0.6 0.0|5 1 368.9 45.4 1.4 -0.5|5 2 187.2 220.2 0.0 2.2|5 3 -138.7 -122.9 0.6 0.4|5 4 -142.0 43.0 2.2 1.7|5 5 20.9 106.1 0.9 1.9|6 0 64.4 0.0 -0.2 0.0|6 1 63.8 -18.4 -0.4 0.3|6 2 76.9 16.8 0.9 -1.6|6 3 -115.7 48.8 1.2 -0.4|6 4 -40.9 -59.8 -0.9 0.9|6 5 14.9 10.9 0.3 0.7|6 6 -60.7 72.7 0.9 0.9|7 0 79.5 0.0 -0.0 0.0|7 1 -77.0 -48.9 -0.1 0.6|7 2 -8.8 -14.4 -0.1 0.5|7 3 59.3 -1.0 0.5 -0.8|7 4 15.8 23.4 -0.1 0.0|7 5 2.5 -7.4 -0.8 -1.0|7 6 -11.1 -25.1 -0.8 0.6|7 7 14.2 -2.3 0.8 -0.2|8 0 23.2 0.0 -0.1 0.0|8 1 10.8 7.1 0.2 -0.2|8 2 -17.5 -12.6 0.0 0.5|8 3 2.0 11.4 0.5 -0.4|8 4 -21.7 -9.7 -0.1 0.4|8 5 16.9 12.7 0.3 -0.5|8 6 15.0 0.7 0.2 -0.6|8 7 -16.8 -5.2 -0.0 0.3|8 8 0.9 3.9 0.2 0.2|9 0 4.6 0.0 -0.0 0.0|9 1 7.8 -24.8 -0.1 -0.3|9 2 3.0 12.2 0.1 0.3|9 3 -0.2 8.3 0.3 -0.3|9 4 -2.5 -3.3 -0.3 0.3|9 5 -13.1 -5.2 0.0 0.2|9 6 2.4 7.2 0.3 -0.1|9 7 8.6 -0.6 -0.1 -0.2|9 8 -8.7 0.8 0.1 0.4|9 9 -12.9 10.0 -0.1 0.1|10 0 -1.3 0.0 0.1 0.0|10 1 -6.4 3.3 0.0 0.0|10 2 0.2 0.0 0.1 -0.0|10 3 2.0 2.4 0.1 -0.2|10 4 -1.0 5.3 -0.0 0.1|10 5 -0.6 -9.1 -0.3 -0.1|10 6 -0.9 0.4 0.0 0.1|10 7 1.5 -4.2 -0.1 0.0|10 8 0.9 -3.8 -0.1 -0.1|10 9 -2.7 0.9 -0.0 0.2|10 10 -3.9 -9.1 -0.0 -0.0|11 0 2.9 0.0 0.0 0.0|11 1 -1.5 0.0 -0.0 -0.0|11 2 -2.5 2.9 0.0 0.1|11 3 2.4 -0.6 0.0 -0.0|11 4 -0.6 0.2 0.0 0.1|11 5 -0.1 0.5 -0.1 -0.0|11 6 -0.6 -0.3 0.0 -0.0|11 7 -0.1 -1.2 -0.0 0.1|11 8 1.1 -1.7 -0.1 -0.0|11 9 -1.0 -2.9 -0.1 0.0|11 10 -0.2 -1.8 -0.1 0.0|11 11 2.6 -2.3 -0.1 0.0|12 0 -2.0 0.0 0.0 0.0|12 1 -0.2 -1.3 0.0 -0.0|12 2 0.3 0.7 -0.0 0.0|12 3 1.2 1.0 -0.0 -0.1|12 4 -1.3 -1.4 -0.0 0.1|12 5 0.6 -0.0 -0.0 -0.0|12 6 0.6 0.6 0.1 -0.0|12 7 0.5 -0.1 -0.0 -0.0|12 8 -0.1 0.8 0.0 0.0|12 9 -0.4 0.1 0.0 -0.0|12 10 -0.2 -1.0 -0.1 -0.0|12 11 -1.3 0.1 -0.0 0.0|12 12 -0.7 0.2 -0.1 -0.1";
+
+// Síntesis de armónicos esféricos de grado 12 (port del algoritmo geomag de NOAA).
+function crearWMM(epoca, cof) {
+  const MAX = 12;
+  const z = () => Array.from({ length: 13 }, () => new Array(13).fill(0));
+  const c = z(), cd = z(), k = z();
+  for (const linea of cof.split("|")) {
+    if (!linea.trim()) continue;
+    const [n, m, g, h, dg, dh] = linea.trim().split(/\s+/).map(Number);
+    c[m][n] = g; cd[m][n] = dg;
+    if (m !== 0) { c[n][m - 1] = h; cd[n][m - 1] = dh; }
+  }
+  const snorm = new Array(13 * 13).fill(0), fn = new Array(13).fill(0), fm = new Array(13).fill(0);
+  snorm[0] = 1;
+  for (let n = 1; n <= MAX; n++) {
+    snorm[n] = snorm[n - 1] * (2 * n - 1) / n;
+    let j = 2;
+    for (let m = 0; m <= n; m++) {
+      k[m][n] = ((n - 1) * (n - 1) - m * m) / ((2 * n - 1) * (2 * n - 3));
+      if (m > 0) {
+        const flnmj = ((n - m + 1) * j) / (n + m);
+        snorm[n + m * 13] = snorm[n + (m - 1) * 13] * Math.sqrt(flnmj);
+        j = 1;
+        c[n][m - 1] *= snorm[n + m * 13];
+        cd[n][m - 1] *= snorm[n + m * 13];
+      }
+      c[m][n] *= snorm[n + m * 13];
+      cd[m][n] *= snorm[n + m * 13];
+    }
+    fn[n] = n + 1; fm[n] = n;
+  }
+  k[1][1] = 0;
+
+  // Declinación en grados (E positiva) para lat/lon geodésicas, altura en km y año decimal.
+  function declinacion(glat, glon, alt, anio) {
+    const a = 6378.137, b = 6356.7523142, re = 6371.2;
+    const a2 = a * a, b2 = b * b, c2 = a2 - b2, a4 = a2 * a2, b4 = b2 * b2, c4 = a4 - b4;
+    const dt = anio - epoca, dtr = Math.PI / 180;
+    const rlon = glon * dtr, rlat = glat * dtr;
+    const srlat = Math.sin(rlat), crlat = Math.cos(rlat), srlat2 = srlat * srlat, crlat2 = crlat * crlat;
+    const sp = new Array(13).fill(0), cp = new Array(13).fill(0);
+    cp[0] = 1; sp[1] = Math.sin(rlon); cp[1] = Math.cos(rlon);
+    for (let m = 2; m <= MAX; m++) {
+      sp[m] = sp[1] * cp[m - 1] + cp[1] * sp[m - 1];
+      cp[m] = cp[1] * cp[m - 1] - sp[1] * sp[m - 1];
+    }
+    const q = Math.sqrt(a2 - c2 * srlat2), q1 = alt * q, q2 = ((q1 + a2) / (q1 + b2)) ** 2;
+    const ct = srlat / Math.sqrt(q2 * crlat2 + srlat2), st = Math.sqrt(1 - ct * ct);
+    const r = Math.sqrt(alt * alt + 2 * q1 + (a4 - c4 * srlat2) / (q * q));
+    const d = Math.sqrt(a2 * crlat2 + b2 * srlat2);
+    const ca = (alt + d) / r, sa = c2 * crlat * srlat / (r * d);
+    const p = z(), dp = z(), tc = z(), pp = new Array(13).fill(0);
+    p[0][0] = 1; pp[0] = 1;
+    const aor = re / r;
+    let ar = aor * aor, br = 0, bt = 0, bp = 0, bpp = 0;
+    for (let n = 1; n <= MAX; n++) {
+      ar *= aor;
+      for (let m = 0; m <= n; m++) {
+        if (n === m) {
+          p[m][n] = st * p[m - 1][n - 1];
+          dp[m][n] = st * dp[m - 1][n - 1] + ct * p[m - 1][n - 1];
+        } else if (n === 1 && m === 0) {
+          p[m][n] = ct * p[m][n - 1];
+          dp[m][n] = ct * dp[m][n - 1] - st * p[m][n - 1];
+        } else if (n > 1 && n !== m) {
+          if (m > n - 2) { p[m][n - 2] = 0; dp[m][n - 2] = 0; }
+          p[m][n] = ct * p[m][n - 1] - k[m][n] * p[m][n - 2];
+          dp[m][n] = ct * dp[m][n - 1] - st * p[m][n - 1] - k[m][n] * dp[m][n - 2];
+        }
+        tc[m][n] = c[m][n] + dt * cd[m][n];
+        if (m !== 0) tc[n][m - 1] = c[n][m - 1] + dt * cd[n][m - 1];
+        const par = ar * p[m][n];
+        let temp1, temp2;
+        if (m === 0) { temp1 = tc[m][n] * cp[m]; temp2 = tc[m][n] * sp[m]; }
+        else {
+          temp1 = tc[m][n] * cp[m] + tc[n][m - 1] * sp[m];
+          temp2 = tc[m][n] * sp[m] - tc[n][m - 1] * cp[m];
+        }
+        bt -= ar * temp1 * dp[m][n];
+        bp += fm[m] * temp2 * par;
+        br += fn[n] * temp1 * par;
+        if (st === 0 && m === 1) {
+          pp[n] = n === 1 ? pp[n - 1] : ct * pp[n - 1] - k[m][n] * pp[n - 2];
+          bpp += fm[m] * temp2 * ar * pp[n];
+        }
+      }
+    }
+    bp = st === 0 ? bpp : bp / st;
+    return Math.atan2(bp, -bt * ca - br * sa) / dtr;
+  }
+
+  // { decl, varAnual } en grados y grados/año (diferencia central de ±0,5 año).
+  return (glat, glon, alt, anio) => ({
+    decl: declinacion(glat, glon, alt, anio),
+    varAnual: declinacion(glat, glon, alt, anio + 0.5) - declinacion(glat, glon, alt, anio - 0.5),
+  });
+}
+const wmm = crearWMM(WMM_EPOCA, WMM_COF);
+
+const MILS_POR_GRADO = 6400 / 360;
+const MERIDIANOS = { 1: -72, 2: -69, 3: -66, 4: -63, 5: -60, 6: -57, 7: -54 };
+
+const $ = (id) => document.getElementById(id);
+const num = (id) => { const v = parseFloat(String($(id).value).replace(",", ".")); return isNaN(v) ? 0 : v; };
+const signo = (id, negativo) => ($(id).value === negativo ? -1 : 1);
+
+function dmsADecimal(g, m, s) { return Math.abs(g) + Math.abs(m) / 60 + Math.abs(s) / 3600; }
+
+function decimalAGms(d) {
+  const neg = d < 0; let a = Math.abs(d);
+  let g = Math.floor(a), m = Math.floor((a - g) * 60), s = ((a - g) * 60 - m) * 60;
+  if (s >= 59.995) { s = 0; m += 1; } if (m >= 60) { m = 0; g += 1; }
+  return `${neg ? "−" : ""}${g}° ${String(m).padStart(2, "0")}′ ${s.toFixed(2).padStart(5, "0")}″`;
+}
+
+const fmt = (x, n = 5) => (x < 0 ? "−" : "") + Math.abs(x).toFixed(n);
+const fmtMil = (d) => { const m = d * MILS_POR_GRADO; return `${fmt(m, 1)} ‰ ${m < 0 ? "W" : m > 0 ? "E" : ""}`; };
+
+function fajaParaLon(lon) {
+  for (let f = 1; f <= 7; f++) if (Math.abs(lon - MERIDIANOS[f]) <= 1.5) return f;
+  return null;
+}
+
+function leerPunto(p) {
+  const lat = dmsADecimal(num(p + "LatG"), num(p + "LatM"), num(p + "LatS")) * signo(p + "LatH", "S");
+  const lon = dmsADecimal(num(p + "LonG"), num(p + "LonM"), num(p + "LonS")) * signo(p + "LonH", "O");
+  return { lat, lon };
+}
+
+function anioDecimal(fechaISO) {
+  const f = fechaISO ? new Date(fechaISO + "T12:00:00") : new Date();
+  const ini = new Date(f.getFullYear(), 0, 1), fin = new Date(f.getFullYear() + 1, 0, 1);
+  return f.getFullYear() + (f - ini) / (fin - ini);
+}
+
+function leerDecimal(id) {
+  const v = parseFloat(String($(id).value).trim().replace(",", "."));
+  return isNaN(v) ? null : v;
+}
+
+function cargarDeclinacion(dec, varAnual, anio) {
+  const a = Math.abs(dec);
+  let g = Math.floor(a), m = Math.floor((a - g) * 60), s = Math.round(((a - g) * 60 - m) * 60 * 10) / 10;
+  if (s >= 60) { s = 0; m += 1; } if (m >= 60) { m = 0; g += 1; }
+  $("decG").value = g; $("decM").value = m; $("decS").value = s;
+  $("decH").value = dec < 0 ? "W" : "E";
+  $("varMin").value = (Math.abs(varAnual) * 60).toFixed(2);
+  $("varH").value = varAnual < 0 ? "W" : "E";
+  $("anioBase").value = anio.toFixed(2);
+}
+
+function calcular() {
+  const modo = $("modo").value;
+  document.querySelectorAll(".esquinas").forEach((s) => (s.hidden = modo === "punto"));
+  $("filaPunto").hidden = modo !== "punto";
+  $("tituloCentro").textContent = modo === "punto" ? "Punto de cálculo" : "Centro de hoja";
+
+  const no = leerPunto("no"), se = leerPunto("se");
+  let lat = (no.lat + se.lat) / 2, lon = (no.lon + se.lon) / 2;
+  if (modo === "punto") {
+    const pLat = leerDecimal("pLat"), pLon = leerDecimal("pLon");
+    if (pLat !== null && pLon !== null) { lat = pLat; lon = pLon; }
+  }
+
+  const auto = $("fuente").value === "auto";
+  ["decG", "decM", "decS", "decH", "varMin", "varH", "anioBase"].forEach((id) => ($(id).disabled = auto));
+  if (auto) {
+    const anio = anioDecimal($("fecha").value);
+    const r = wmm(lat, lon, (num("altura") || 0) / 1000, anio);
+    cargarDeclinacion(r.decl, r.varAnual, anio);
+    $("estadoModelo").textContent = anio < 2025 || anio >= 2030
+      ? "⚠ Fecha fuera del período de validez del WMM2025 (2025–2029)."
+      : `WMM2025 · año ${anio.toFixed(2)}`;
+  } else {
+    $("estadoModelo").textContent = "Valor cargado a mano.";
+  }
+  $("cLatD").textContent = fmt(lat); $("cLonD").textContent = fmt(lon);
+  $("cLatGMS").textContent = decimalAGms(Math.abs(lat)) + (lat < 0 ? " S" : " N");
+  $("cLonGMS").textContent = decimalAGms(Math.abs(lon)) + (lon < 0 ? " O" : " E");
+
+  const avisos = [];
+  if (modo === "hoja") {
+    if (no.lat < se.lat) avisos.push("El extremo NO debe estar al norte del SE (revisá las latitudes).");
+    if (no.lon > se.lon) avisos.push("El extremo NO debe estar al oeste del SE (revisá las longitudes).");
+  } else if (leerDecimal("pLat") === null || leerDecimal("pLon") === null) {
+    avisos.push("Cargá la latitud y la longitud del punto, o usá la ubicación del dispositivo.");
+  }
+  $("msgZona").textContent = avisos.join(" ");
+
+  const sugerida = fajaParaLon(lon);
+  const sel = $("faja").value;
+  const faja = sel === "auto" ? sugerida : parseInt(sel, 10);
+  const msgFaja = [];
+  if (!faja) msgFaja.push("La longitud del centro no cae en ninguna faja argentina (1 a 7). Elegí la faja a mano.");
+  else if (sugerida && faja !== sugerida) msgFaja.push(`Para esta longitud la faja que corresponde es la ${sugerida}. Estás usando la ${faja}.`);
+  const fNo = fajaParaLon(no.lon), fSe = fajaParaLon(se.lon);
+  if (modo === "hoja" && fNo && fSe && fNo !== fSe) msgFaja.push(`La hoja cruza el límite entre las fajas ${fNo} y ${fSe}.`);
+  $("msgFaja").textContent = msgFaja.join(" ");
+  const lcf = faja ? MERIDIANOS[faja] : NaN;
+  $("lcf").value = faja ? `${lcf}°  (faja ${faja})` : "—";
+
+  const dLon = lon - lcf;
+  const conv = dLon * Math.sin(lat * Math.PI / 180);
+  const dec = dmsADecimal(num("decG"), num("decM"), num("decS")) * signo("decH", "W");
+  const desv = dec - conv;
+
+  const ok = !isNaN(conv);
+  $("dLon").textContent = ok ? fmt(dLon) : "—";
+  $("convD").textContent = ok ? fmt(conv) : "—";
+  $("convGMS").textContent = ok ? decimalAGms(conv) : "—";
+  $("convMil").textContent = ok ? fmtMil(conv) : "—";
+  $("decD").textContent = fmt(dec); $("decGMS").textContent = decimalAGms(dec); $("decMil").textContent = fmtMil(dec);
+  $("desvD").textContent = ok ? fmt(desv) : "—";
+  $("desvGMS").textContent = ok ? decimalAGms(desv) : "—";
+  $("desvMil").textContent = ok ? fmtMil(desv) : "—";
+
+  const varMin = parseFloat(String($("varMin").value).replace(",", "."));
+  const a0 = parseFloat($("anioBase").value), a1 = parseFloat($("anioObj").value);
+  const proy = ok && !isNaN(varMin) && !isNaN(a0) && !isNaN(a1);
+  $("filaProy").hidden = !proy;
+  if (proy) {
+    const v = (varMin / 60) * signo("varH", "W");
+    const desvP = dec + v * (a1 - a0) - conv;
+    $("anioObjTxt").textContent = a1;
+    $("proyD").textContent = fmt(desvP); $("proyGMS").textContent = decimalAGms(desvP); $("proyMil").textContent = fmtMil(desvP);
+  }
+
+  const d1 = num("cvG") + num("cvM") / 60 + num("cvS") / 3600;
+  $("cvOut1").textContent = d1.toFixed(6); $("cvOut1m").textContent = (d1 * MILS_POR_GRADO).toFixed(2);
+  const d2 = num("cvD");
+  $("cvOut2").textContent = decimalAGms(d2); $("cvOut2m").textContent = (d2 * MILS_POR_GRADO).toFixed(2);
+  const d3 = num("cvMil") / MILS_POR_GRADO;
+  $("cvOut3").textContent = d3.toFixed(6); $("cvOut3g").textContent = decimalAGms(d3);
+}
+
+function usarUbicacion() {
+  const btn = $("btnGeo"), estado = $("geoEstado");
+  if (!navigator.geolocation) { estado.textContent = "Este navegador no permite obtener la ubicación."; return; }
+  btn.disabled = true;
+  estado.textContent = "Obteniendo ubicación… (aceptá el permiso del navegador)";
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const { latitude, longitude, altitude, accuracy } = pos.coords;
+      $("modo").value = "punto";
+      $("pLat").value = latitude.toFixed(6);
+      $("pLon").value = longitude.toFixed(6);
+      if (altitude !== null && !isNaN(altitude)) $("altura").value = Math.round(altitude);
+      $("fuente").value = "auto";
+      estado.textContent = `Ubicación obtenida (precisión ±${Math.round(accuracy)} m).`;
+      btn.disabled = false;
+      calcular();
+    },
+    (err) => {
+      const motivos = { 1: "permiso denegado", 2: "ubicación no disponible", 3: "tiempo agotado" };
+      estado.textContent = `No se pudo obtener la ubicación: ${motivos[err.code] || err.message}.`;
+      btn.disabled = false;
+    },
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 }
+  );
+}
+
+$("fecha").value = new Date().toISOString().slice(0, 10);
+$("btnGeo").addEventListener("click", usarUbicacion);
+document.querySelectorAll("input, select").forEach((el) => {
+  el.addEventListener("input", calcular);
+  el.addEventListener("change", calcular);
+});
+calcular();
+</script>
+</body>
+</html>
